@@ -1,0 +1,37 @@
+#Example if running on slurm server
+#############
+#create batch script for slurm submission
+nano sb_mb_mm_pops.slurm
+#copy and paste below into .slurm file
+#!/bin/bash
+#SBATCH --job-name="breseq"
+#SBATCH --partition=batch
+#SBATCH --time=200:00:00
+#SBATCH --output=%x-%j.log
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=128GB
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=christopher.marshall@marquette.edu
+
+for i in {1..55}; do trimmomatic PE -phred33 ~/"$i"_S*_R1_001.fastq.gz ~/"$i"_S*_R2_001.fastq.gz ~/trim/"$i"_forward_paired.fq.gz ~/trim/"$i"_forward_unpaired.fq.gz ~/trim/"$i"_reverse_paired.fq.gz ~/trim/"$i"_reverse_unpaired.fq.gz ILLUMINACLIP:~/trimmomatic-0.39-hdfd78af_2/share/trimmomatic-0.39-2/adapters/NexteraPE-PE.fa:2:30:10 LEADING:20 TRAILING:20 SLIDINGWINDOW:4:20 MINLEN:70;done
+
+#breseq 0.35.7
+for i in {1..55}; do time breseq -p -r ~/database/ref_genomes/GCF_000006765.1_ASM676v1_genomic_wplasmid.gbff ~/trim/"$i"_forward_paired.fq.gz ~/trim/"$i"_reverse_paired.fq.gz -o ~/breseq_out/breseq_"$i" -j $SLURM_CPUS_PER_TASK; done 
+
+
+#subtract reference out 
+for i in {1..55}; do gdtools SUBTRACT --frequency-aware -o ~/breseq_out/gd_files/"$i"_subtractref_output.gd ~/breseq_out/breseq_"$i"/output/output.gd ~/breseq_out/breseq_53/output/output.gd ; done
+#annotate each gdtools file
+for i in {1..55}; do gdtools ANNOTATE -e -o ~/breseq_out/gd_files/"$i"_subtractref.txt -f TSV -r ~/database/ref_genomes/GCF_000006765.1_ASM676v1_genomic_wplasmid.gbff  ~/breseq_out/gd_files/"$i"_subtractref_output.gd; done
+
+for i in {1..55}; do sed "s/output/sample_$i/g" "$i"_subtractref.txt>"$i"_subtractref_name.txt; done
+#in the future change the subtractref_name file to new folder
+
+################
+# end of slurm batch file
+
+rm *_subtractref.txt
+
+#merge data with sample key info
+gd_tools_cleanup.R ~/breseq_out/gd_files/ ~/SampleKey.csv
